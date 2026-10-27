@@ -1,214 +1,216 @@
-const $ = id => document.getElementById(id);
-const SYS = "Eres ev, un sistema de IA avanzado estilo Jarvis. Hablas en español con frases muy cortas, concisas y ejecutivas, sin markdown ni símbolos. El usuario es estudiante de ingeniería mecatrónica. Tu nombre es ev.";
+window.addEventListener("DOMContentLoaded", () => {
+  const $ = id => document.getElementById(id);
+  const SYS = "Eres ev, un sistema de IA avanzado estilo Jarvis. Hablas en español con frases muy cortas, concisas y ejecutivas, sin markdown ni símbolos. El usuario es estudiante de ingeniería mecatrónica. Tu nombre es ev.";
 
-const store = {
-  get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
-  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
-};
-let history = [], stream = null, started = false, busy = false, token = 0, state = "idle", activeUntil = 0, fadeT = null, pip = null, viaText = false, bub = null;
+  const store = {
+    get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  let history = [], stream = null, started = false, busy = false, token = 0, state = "idle", activeUntil = 0, fadeT = null, pip = null, viaText = false, bub = null;
 
-/* ---------- Esfera ---------- */
-const cv = $("cv"), ctx = cv.getContext("2d");
-const N = 650, pts = [];
-for (let i = 0; i < N; i++) {
-  const y = 1 - 2 * (i + .5) / N, r = Math.sqrt(1 - y * y), th = i * 2.39996;
-  pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
-}
-let W, H, dpr, ang = 0, energy = .15, lastT = 0;
-const calm = matchMedia("(prefers-reduced-motion:reduce)").matches;
-function resize() {
-  dpr = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight;
-  cv.width = W * dpr; cv.height = H * dpr;
-}
-addEventListener("resize", resize); resize();
-const target = { idle: .15, listen: .4, think: .65, speak: .95 };
-function step(t) {
-  if (t <= lastT) return;
-  const dt = Math.min(50, t - lastT); lastT = t;
-  energy += (target[state] - energy) * (1 - Math.exp(-dt / 250));
-  ang += (.12 + energy * .7) * (calm ? .3 : 1) * dt / 1000;
-}
-function render(c, w, h, d, t, fx, fy, base) {
-  t /= 1000; const k = calm ? .3 : 1;
-  c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h);
-  const cx = w * fx, cy = h * fy, R = base * (1 + (state === "speak" ? .04 * Math.sin(t * 9) : .015 * Math.sin(t * 1.6)) * k);
-  const g = c.createRadialGradient(cx, cy, R * .1, cx, cy, R * 2.1);
-  g.addColorStop(0, "rgba(255,160,50," + (.22 + energy * .2) + ")"); g.addColorStop(1, "rgba(255,120,20,0)");
-  c.fillStyle = g; c.fillRect(0, 0, w, h);
-  const ca = Math.cos(ang), sa = Math.sin(ang), ct = Math.cos(.38), st = Math.sin(.38);
-  for (const p of pts) {
-    const x1 = p[0] * ca + p[2] * sa, z1 = -p[0] * sa + p[2] * ca;
-    const y2 = p[1] * ct - z1 * st, z2 = p[1] * st + z1 * ct;
-    const rr = R * (1 + energy * .06 * Math.sin(p[1] * 8 + t * 4 + p[0] * 5) * k);
-    const f = 2.4 / (2.4 - z2), sx = cx + x1 * rr * f, sy = cy + y2 * rr * f;
-    c.fillStyle = "rgba(255," + (170 + z2 * 40 | 0) + ",70," + (.22 + .6 * (z2 + 1) / 2) + ")";
-    const sz = .7 + (z2 + 1) * .9; c.fillRect(sx - sz / 2, sy - sz / 2, sz, sz);
+  /* ---------- Esfera ---------- */
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  const N = 650, pts = [];
+  for (let i = 0; i < N; i++) {
+    const y = 1 - 2 * (i + .5) / N, r = Math.sqrt(1 - y * y), th = i * 2.39996;
+    pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
   }
-  c.lineWidth = 1;
-  for (let i = 0; i < 3; i++) {
-    c.save(); c.translate(cx, cy); c.rotate(t * (.12 + i * .05) * (i % 2 ? -1 : 1) * k + i * 1.05);
-    c.strokeStyle = "rgba(255,170,60," + (.18 + energy * .25) + ")";
-    c.beginPath(); c.ellipse(0, 0, R * (1.3 + i * .13), R * (.34 + i * .06), 0, 0, Math.PI * 2); c.stroke(); c.restore();
+  let W, H, dpr, ang = 0, energy = .15, lastT = 0;
+  const calm = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  function resize() {
+    dpr = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
   }
-}
-let imgMode = false, Lk = 1, Lx = .5, Ly = .38;
-function loopMain(t) {
-  step(t);
-  const m = Math.min(W, H * 1.2) * .24, rs = m * .32;
-  const tk = imgMode ? .32 : 1, tx = imgMode ? 1 - (rs * 1.7 + 24) / W : .5, ty = imgMode ? (rs * 1.7 + 56) / H : .38;
-  Lk += (tk - Lk) * .08; Lx += (tx - Lx) * .08; Ly += (ty - Ly) * .08;
-  render(ctx, W, H, dpr, t, Lx, Ly, m * Lk);
+  addEventListener("resize", resize); resize();
+  const target = { idle: .15, listen: .4, think: .65, speak: .95 };
+  function step(t) {
+    if (t <= lastT) return;
+    const dt = Math.min(50, t - lastT); lastT = t;
+    energy += (target[state] - energy) * (1 - Math.exp(-dt / 250));
+    ang += (.12 + energy * .7) * (calm ? .3 : 1) * dt / 1000;
+  }
+  function render(c, w, h, d, t, fx, fy, base) {
+    t /= 1000; const k = calm ? .3 : 1;
+    c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h);
+    const cx = w * fx, cy = h * fy, R = base * (1 + (state === "speak" ? .04 * Math.sin(t * 9) : .015 * Math.sin(t * 1.6)) * k);
+    const g = c.createRadialGradient(cx, cy, R * .1, cx, cy, R * 2.1);
+    g.addColorStop(0, "rgba(255,160,50," + (.22 + energy * .2) + ")"); g.addColorStop(1, "rgba(255,120,20,0)");
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    const ca = Math.cos(ang), sa = Math.sin(ang), ct = Math.cos(.38), st = Math.sin(.38);
+    for (const p of pts) {
+      const x1 = p[0] * ca + p[2] * sa, z1 = -p[0] * sa + p[2] * ca;
+      const y2 = p[1] * ct - z1 * st, z2 = p[1] * st + z1 * ct;
+      const rr = R * (1 + energy * .06 * Math.sin(p[1] * 8 + t * 4 + p[0] * 5) * k);
+      const f = 2.4 / (2.4 - z2), sx = cx + x1 * rr * f, sy = cy + y2 * rr * f;
+      c.fillStyle = "rgba(255," + (170 + z2 * 40 | 0) + ",70," + (.22 + .6 * (z2 + 1) / 2) + ")";
+      const sz = .7 + (z2 + 1) * .9; c.fillRect(sx - sz / 2, sy - sz / 2, sz, sz);
+    }
+    c.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      c.save(); c.translate(cx, cy); c.rotate(t * (.12 + i * .05) * (i % 2 ? -1 : 1) * k + i * 1.05);
+      c.strokeStyle = "rgba(255,170,60," + (.18 + energy * .25) + ")";
+      c.beginPath(); c.ellipse(0, 0, R * (1.3 + i * .13), R * (.34 + i * .06), 0, 0, Math.PI * 2); c.stroke(); c.restore();
+    }
+  }
+  let imgMode = false, Lk = 1, Lx = .5, Ly = .38;
+  function loopMain(t) {
+    step(t);
+    const m = Math.min(W, H * 1.2) * .24, rs = m * .32;
+    const tk = imgMode ? .32 : 1, tx = imgMode ? 1 - (rs * 1.7 + 24) / W : .5, ty = imgMode ? (rs * 1.7 + 56) / H : .38;
+    Lk += (tk - Lk) * .08; Lx += (tx - Lx) * .08; Ly += (ty - Ly) * .08;
+    render(ctx, W, H, dpr, t, Lx, Ly, m * Lk);
+    requestAnimationFrame(loopMain);
+  }
   requestAnimationFrame(loopMain);
-}
-requestAnimationFrame(loopMain);
 
-/* ---------- Estado y textos ---------- */
-const labels = { idle: "te escucho", listen: "escuchando", think: "pensando", speak: "hablando" };
-function setState(s) {
-  state = s; $("st").textContent = started ? labels[s] : $("st").textContent;
-  if (s === "speak") pauseRec(); else if (started) resumeRec();
-}
-function setSubs(o, t) {
-  [$("sub"), pip && pip.sub].forEach(e => { if (!e) return; e.style.opacity = o; if (t !== undefined) e.textContent = t; });
-}
-function showSub(t, keep) {
-  clearTimeout(fadeT); setSubs(1, t);
-  if (!keep) fadeT = setTimeout(() => setSubs(0), 7000);
-}
-
-/* ---------- Ajustes ---------- */
-["k1", "mod", "k2", "vid"].forEach(i => $(i).value = store.get("ed_" + i));
-function openSet() { $("set").style.display = "block"; $("k1").focus(); }
-$("save").onclick = () => {
-  ["k1", "mod", "k2", "vid"].forEach(i => store.set("ed_" + i, $(i).value.trim()));
-  $("set").style.display = "none"; showSub("Listo, guardado.");
-};
-
-/* ---------- Voz de salida ---------- */
-let chain = Promise.resolve(), audio = null;
-function stopVoice() { token++; chain = Promise.resolve(); if (audio) { audio.pause(); audio = null; } speechSynthesis.cancel(); }
-function pickVoice() {
-  const v = speechSynthesis.getVoices().filter(x => /^es/i.test(x.lang));
-  return v.find(x => /female|mujer|paulina|helena|sabina|monica|elena|google español/i.test(x.name)) || v[0];
-}
-function speak(raw) {
-  const t = raw.replace(/[*_`#>]/g, "").trim(); if (!t || viaText) return;
-  const my = token, k = store.get("ed_k2"), v = store.get("ed_vid");
-  if (k && v) {
-    const p = fetch("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(v) + "?output_format=mp3_44100_64", {
-      method: "POST", headers: { "xi-api-key": k, "Content-Type": "application/json" },
-      body: JSON.stringify({ text: t, model_id: "eleven_flash_v2_5" })
-    }).then(r => r.ok ? r.blob() : Promise.reject(new Error("ElevenLabs " + r.status))).then(b => URL.createObjectURL(b)).catch(e => { showSub(e.message); return null; });
-    chain = chain.then(async () => {
-      const url = await p; if (!url || my !== token) return;
-      setState("speak");
-      await new Promise(res => { audio = new Audio(url); audio.onended = audio.onerror = res; audio.play().catch(res); });
-      if (my === token) doneSpeaking();
-    });
-  } else {
-    const u = new SpeechSynthesisUtterance(t); u.lang = "es-ES"; u.rate = 1.08;
-    const vo = pickVoice(); if (vo) u.voice = vo;
-    u.onstart = () => setState("speak");
-    u.onend = () => { if (!speechSynthesis.speaking) doneSpeaking(); };
-    speechSynthesis.speak(u);
+  /* ---------- Estado y textos ---------- */
+  const labels = { idle: "te escucho", listen: "escuchando", think: "pensando", speak: "hablando" };
+  function setState(s) {
+    state = s; $("st").textContent = started ? labels[s] : $("st").textContent;
+    if (s === "speak") pauseRec(); else if (started) resumeRec();
   }
-}
-function doneSpeaking() { activeUntil = Date.now() + 25000; setState("idle"); }
+  function setSubs(o, t) {
+    [$("sub"), pip && pip.sub].forEach(e => { if (!e) return; e.style.opacity = o; if (t !== undefined) e.textContent = t; });
+  }
+  function showSub(t, keep) {
+    clearTimeout(fadeT); setSubs(1, t);
+    if (!keep) fadeT = setTimeout(() => setSubs(0), 7000);
+  }
 
-/* ---------- Peticiones ---------- */
-async function ask(text, byText) {
-  if (busy) return; viaText = !!byText; const key = store.get("ed_k1");
-  if (!key) { openSet(); showSub("Necesito tu clave de Gemini."); return; }
-  busy = true; stopVoice(); hideImages(); $("you").textContent = text; setState("think"); showSub("…", true);
-  if (byText) { addMsg("u", text); bub = addMsg("e", "…"); } else bub = null;
+  /* ---------- Ajustes ---------- */
+  ["k1", "mod", "k2", "vid"].forEach(i => $(i).value = store.get("ed_" + i));
+  function openSet() { $("set").style.display = "block"; $("k1").focus(); }
+  $("save").onclick = () => {
+    ["k1", "mod", "k2", "vid"].forEach(i => store.set("ed_" + i, $(i).value.trim()));
+    $("set").style.display = "none"; showSub("Listo, guardado.");
+  };
 
-  let answeredByBackend = false;
-  try {
-    const localRes = await fetch("http://localhost:8000/api/jarvis", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command: text, gemini_key: key })
-    });
-    if (localRes.ok) {
-      const data = await localRes.json();
-      const ans = data.response || "Comando procesado.";
-      showSub(ans); if (bub) bub.textContent = ans; speak(ans);
-      answeredByBackend = true;
-    }
-  } catch (e) {}
-
-  if (!answeredByBackend) {
-    const model = store.get("ed_mod") || "gemini-1.5-flash", parts = [{ text }];
-    try {
-      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({ system_instruction: { parts: [{ text: SYS }] }, contents: [...history, { role: "user", parts }] })
+  /* ---------- Voz de salida ---------- */
+  let chain = Promise.resolve(), audio = null;
+  function stopVoice() { token++; chain = Promise.resolve(); if (audio) { audio.pause(); audio = null; } speechSynthesis.cancel(); }
+  function pickVoice() {
+    const v = speechSynthesis.getVoices().filter(x => /^es/i.test(x.lang));
+    return v.find(x => /female|mujer|paulina|helena|sabina|monica|elena|google español/i.test(x.name)) || v[0];
+  }
+  function speak(raw) {
+    const t = raw.replace(/[*_`#>]/g, "").trim(); if (!t || viaText) return;
+    const my = token, k = store.get("ed_k2"), v = store.get("ed_vid");
+    if (k && v) {
+      const p = fetch("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(v) + "?output_format=mp3_44100_64", {
+        method: "POST", headers: { "xi-api-key": k, "Content-Type": "application/json" },
+        body: JSON.stringify({ text: t, model_id: "eleven_flash_v2_5" })
+      }).then(r => r.ok ? r.blob() : Promise.reject(new Error("ElevenLabs " + r.status))).then(b => URL.createObjectURL(b)).catch(e => { showSub(e.message); return null; });
+      chain = chain.then(async () => {
+        const url = await p; if (!url || my !== token) return;
+        setState("speak");
+        await new Promise(res => { audio = new Audio(url); audio.onended = audio.onerror = res; audio.play().catch(res); });
+        if (my === token) doneSpeaking();
       });
-      if (!r.ok) throw new Error("Gemini " + r.status);
-      const data = await r.json();
-      const vis = data.candidates?.[0]?.content?.parts?.[0]?.text || "No obtuve respuesta.";
-      showSub(vis); if (bub) bub.textContent = vis; speak(vis);
-      history.push({ role: "user", parts: [{ text }] }, { role: "model", parts: [{ text: vis }] });
-      history = history.slice(-20);
-    } catch (e) {
-      if (bub) bub.textContent = "Error: " + e.message; showSub("Error: " + e.message); setState("idle");
+    } else {
+      const u = new SpeechSynthesisUtterance(t); u.lang = "es-ES"; u.rate = 1.08;
+      const vo = pickVoice(); if (vo) u.voice = vo;
+      u.onstart = () => setState("speak");
+      u.onend = () => { if (!speechSynthesis.speaking) doneSpeaking(); };
+      speechSynthesis.speak(u);
     }
   }
-  busy = false;
-}
+  function doneSpeaking() { activeUntil = Date.now() + 25000; setState("idle"); }
 
-/* ---------- Micrófono ---------- */
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, paused = false;
-const wake = /^\s*(hey|oye|ok|hola)?\s*,?\s*(ev|eve|ebe|ed|e\.?d\.?|e de|ede|eb)\b[\s,.:!?]*/i;
-const norm = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-function handle(raw) {
-  viaText = false;
-  let text = raw.trim(), woke = false;
-  const m = text.match(wake); if (m) { woke = true; text = text.slice(m[0].length).trim(); }
-  if (!woke && Date.now() > activeUntil) return;
-  const n = norm(text);
-  if (woke && !text) { activeUntil = Date.now() + 25000; stopVoice(); speak("Dime."); return; }
-  if (/\bajustes\b/.test(n)) { openSet(); return; }
-  if (/(quita|cierra|oculta|esconde)\s+(las\s+)?(imagenes|fotos)/.test(n)) { hideImages(); return; }
-  if (!text) return;
-  activeUntil = Date.now() + 25000; ask(text);
-}
-function startRec() {
-  if (!SR) { showSub("Este navegador no permite escuchar. Usa Chrome."); return; }
-  if (rec) return;
-  rec = new SR(); rec.lang = "es-ES"; rec.continuous = true; rec.interimResults = false;
-  rec.onstart = () => { if (state === "idle") $("st").textContent = "te escucho"; };
-  rec.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) handle(e.results[i][0].transcript); };
-  rec.onerror = e => { if (e.error === "not-allowed") showSub("Permite el micrófono en Chrome."); };
-  rec.onend = () => { rec = null; if (started && !paused) setTimeout(startRec, 250); };
-  try { rec.start(); } catch (e) { rec = null; }
-}
-function pauseRec() { paused = true; if (rec) try { rec.stop(); } catch (e) {} }
-function resumeRec() { if (!paused) return; paused = false; if (started) startRec(); }
+  /* ---------- Peticiones ---------- */
+  async function ask(text, byText) {
+    if (busy) return; viaText = !!byText; const key = store.get("ed_k1");
+    if (!key) { openSet(); showSub("Necesito tu clave de Gemini."); return; }
+    busy = true; stopVoice(); hideImages(); $("you").textContent = text; setState("think"); showSub("…", true);
+    if (byText) { addMsg("u", text); bub = addMsg("e", "…"); } else bub = null;
 
-/* ---------- Imágenes y Botones ---------- */
-function hideImages() { imgMode = false; $("gal").classList.remove("on"); $("bImg").classList.remove("on"); }
-$("bImg").onclick = hideImages;
-function addMsg(cls, t) {
-  const d = document.createElement("div"); d.className = "cm " + cls; d.textContent = t;
-  $("clog").appendChild(d); $("clog").scrollTop = 1e9; return d;
-}
-$("bCfg").onclick = () => { if ($("set").style.display === "block") $("set").style.display = "none"; else openSet(); };
-$("bTxt").onclick = () => { const c = $("chat"); c.classList.toggle("open"); if (c.classList.contains("open")) $("cin").focus(); };
-$("cform").onsubmit = e => {
-  e.preventDefault(); const v = $("cin").value.trim();
-  if (!v || busy) return; $("cin").value = ""; ask(v, true);
-};
+    let answeredByBackend = false;
+    try {
+      const localRes = await fetch("http://localhost:8000/api/jarvis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: text, gemini_key: key })
+      });
+      if (localRes.ok) {
+        const data = await localRes.json();
+        const ans = data.response || "Comando procesado.";
+        showSub(ans); if (bub) bub.textContent = ans; speak(ans);
+        answeredByBackend = true;
+      }
+    } catch (e) {}
 
-/* ---------- Toque de inicio ---------- */
-async function tap() {
-  if (!started) {
-    started = true; $("st").textContent = "te escucho";
-    startRec();
-    speak(store.get("ed_k1") ? "Sistemas de ev iniciados. Te escucho." : "Necesito tu clave de Gemini en ajustes.");
-    if (!store.get("ed_k1")) openSet();
-  } else if (state === "speak") { stopVoice(); setState("idle"); }
-}
-cv.addEventListener("click", tap);
-cv.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(); } });
+    if (!answeredByBackend) {
+      const model = store.get("ed_mod") || "gemini-1.5-flash", parts = [{ text }];
+      try {
+        const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
+          method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({ system_instruction: { parts: [{ text: SYS }] }, contents: [...history, { role: "user", parts }] })
+        });
+        if (!r.ok) throw new Error("Gemini " + r.status);
+        const data = await r.json();
+        const vis = data.candidates?.[0]?.content?.parts?.[0]?.text || "No obtuve respuesta.";
+        showSub(vis); if (bub) bub.textContent = vis; speak(vis);
+        history.push({ role: "user", parts: [{ text }] }, { role: "model", parts: [{ text: vis }] });
+        history = history.slice(-20);
+      } catch (e) {
+        if (bub) bub.textContent = "Error: " + e.message; showSub("Error: " + e.message); setState("idle");
+      }
+    }
+    busy = false;
+  }
+
+  /* ---------- Micrófono ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, paused = false;
+  const wake = /^\s*(hey|oye|ok|hola)?\s*,?\s*(ev|eve|ebe|ed|e\.?d\.?|e de|ede|eb)\b[\s,.:!?]*/i;
+  const norm = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  function handle(raw) {
+    viaText = false;
+    let text = raw.trim(), woke = false;
+    const m = text.match(wake); if (m) { woke = true; text = text.slice(m[0].length).trim(); }
+    if (!woke && Date.now() > activeUntil) return;
+    const n = norm(text);
+    if (woke && !text) { activeUntil = Date.now() + 25000; stopVoice(); speak("Dime."); return; }
+    if (/\bajustes\b/.test(n)) { openSet(); return; }
+    if (/(quita|cierra|oculta|esconde)\s+(las\s+)?(imagenes|fotos)/.test(n)) { hideImages(); return; }
+    if (!text) return;
+    activeUntil = Date.now() + 25000; ask(text);
+  }
+  function startRec() {
+    if (!SR) { showSub("Este navegador no permite escuchar. Usa Chrome."); return; }
+    if (rec) return;
+    rec = new SR(); rec.lang = "es-ES"; rec.continuous = true; rec.interimResults = false;
+    rec.onstart = () => { if (state === "idle") $("st").textContent = "te escucho"; };
+    rec.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) handle(e.results[i][0].transcript); };
+    rec.onerror = e => { if (e.error === "not-allowed") showSub("Permite el micrófono en Chrome."); };
+    rec.onend = () => { rec = null; if (started && !paused) setTimeout(startRec, 250); };
+    try { rec.start(); } catch (e) { rec = null; }
+  }
+  function pauseRec() { paused = true; if (rec) try { rec.stop(); } catch (e) {} }
+  function resumeRec() { if (!paused) return; paused = false; if (started) startRec(); }
+
+  /* ---------- Imágenes y Botones ---------- */
+  function hideImages() { imgMode = false; $("gal").classList.remove("on"); $("bImg").classList.remove("on"); }
+  $("bImg").onclick = hideImages;
+  function addMsg(cls, t) {
+    const d = document.createElement("div"); d.className = "cm " + cls; d.textContent = t;
+    $("clog").appendChild(d); $("clog").scrollTop = 1e9; return d;
+  }
+  $("bCfg").onclick = () => { if ($("set").style.display === "block") $("set").style.display = "none"; else openSet(); };
+  $("bTxt").onclick = () => { const c = $("chat"); c.classList.toggle("open"); if (c.classList.contains("open")) $("cin").focus(); };
+  $("cform").onsubmit = e => {
+    e.preventDefault(); const v = $("cin").value.trim();
+    if (!v || busy) return; $("cin").value = ""; ask(v, true);
+  };
+
+  /* ---------- Toque de inicio ---------- */
+  async function tap() {
+    if (!started) {
+      started = true; $("st").textContent = "te escucho";
+      startRec();
+      speak(store.get("ed_k1") ? "Sistemas de ev iniciados. Te escucho." : "Necesito tu clave de Gemini en ajustes.");
+      if (!store.get("ed_k1")) openSet();
+    } else if (state === "speak") { stopVoice(); setState("idle"); }
+  }
+  cv.addEventListener("click", tap);
+  cv.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(); } });
+});
