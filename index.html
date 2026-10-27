@@ -75,15 +75,42 @@ canvas{position:fixed;inset:0;width:100%;height:100%;cursor:pointer;outline:none
 
 <script>
 const $ = id => document.getElementById(id);
-const SYS = "Eres ev, una asistente de IA con voz de chica, estilo Jarvis. Hablas en español con frases cortas y naturales, sin markdown, listas ni símbolos, porque tu respuesta se lee en voz alta. " +
-  "El usuario estudia ingeniería mecatrónica. Si recibes una imagen de su pantalla, úsala para guiarlo paso a paso diciendo exactamente dónde pulsar. " +
-  "Nunca pidas ni repitas claves, contraseñas ni códigos de verificación. " +
-  "Tu nombre se escribe siempre «ev», en minúsculas. Si la explicación mejora viendo imágenes (un componente, un circuito, una pieza, un lugar, un animal), o si el usuario pide ver imágenes o fotos, termina con una última línea exacta [[imagenes: dos o tres palabras clave en inglés]] sin comentarla. Si no hacen falta imágenes, no pongas esa línea.";
+
 const store = {
   get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
 };
-let history = [], stream = null, started = false, busy = false, token = 0, state = "idle", activeUntil = 0, fadeT = null, pip = null, viaText = false, bub = null;
+
+/* --- SISTEMA DE MEMORIA PERSISTENTE --- */
+function loadSavedHistory() {
+  try {
+    const raw = store.get("ev_history");
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function saveCurrentHistory(hist) {
+  try {
+    // Guardamos solo los últimos 20 mensajes para optimizar
+    store.set("ev_history", JSON.stringify(hist.slice(-20)));
+  } catch (e) {}
+}
+
+let history = loadSavedHistory();
+let stream = null, started = false, busy = false, token = 0, state = "idle", activeUntil = 0, fadeT = null, pip = null, viaText = false, bub = null;
+
+function getSystemPrompt() {
+  const profileMemory = store.get("ev_user_profile") || "Ninguna memoria guardada todavía.";
+  return "Eres ev, una asistente de IA autónoma con voz de chica, estilo Jarvis. Hablas en español con frases cortas, inteligentes y naturales, sin usar jamás markdown, listas ni símbolos de ningún tipo, ya que tus respuestas se leen directamente en voz alta.\n\n" +
+    "MANDATO DE INTELIGENCIA Y MEMORIA:\n" +
+    "- Tienes memoria activa sobre el usuario. Aquí tienes su historial de datos conocidos:\n" +
+    "  [" + profileMemory + "]\n" +
+    "- El usuario estudia ingeniería mecatrónica y programa sus propios proyectos (como esta app ev).\n" +
+    "- Recuerda detalles de conversaciones pasadas de forma fluida y demuestra iniciativa e interés técnico en sus proyectos.\n" +
+    "- Si recibes una captura de pantalla, analízala con precisión para guiarlo paso a paso indicando exactamente dónde pulsar.\n" +
+    "- Tu nombre se escribe siempre «ev», en minúsculas.\n" +
+    "- Si la explicación mejora con imágenes (componentes, esquemas, circuitos, hardware), o si pide ver fotos, concluye con la línea exacta: [[imagenes: palabras clave en ingles]].\n" +
+    "- Nunca pidas ni repitas contraseñas ni claves de seguridad.";
+}
 
 /* ---------- Esfera ---------- */
 const cv = $("cv"), ctx = cv.getContext("2d");
@@ -231,7 +258,7 @@ async function ask(text, byText) {
   try {
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":streamGenerateContent?alt=sse", {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({ system_instruction: { parts: [{ text: SYS }] }, contents: [...history, { role: "user", parts }], generationConfig: gen })
+      body: JSON.stringify({ system_instruction: { parts: [{ text: getSystemPrompt() }] }, contents: [...history, { role: "user", parts }], generationConfig: gen })
     });
     if (!r.ok) throw new Error("Gemini " + r.status);
     const rd = r.body.getReader(), dec = new TextDecoder(); let buf = "";
@@ -251,8 +278,13 @@ async function ask(text, byText) {
     }
     if (pend.trim()) speak(pend);
     if (!full) { if (bub) bub.textContent = "No recibí respuesta."; showSub("No recibí respuesta."); setState("idle"); }
+    
+    // Guardar en memoria activa
     history.push({ role: "user", parts: [{ text }] }, { role: "model", parts: [{ text: vis }] });
-    history = history.slice(-20); showSub(vis);
+    history = history.slice(-20);
+    saveCurrentHistory(history);
+    
+    showSub(vis);
     const mk = full.match(/\[\[\s*im[aá]genes?\s*:\s*([^\]]+)\]\]/i); if (mk) showImages(mk[1]);
   } catch (e) { if (bub) bub.textContent = "Error: " + e.message; showSub("Error: " + e.message); setState("idle"); }
   busy = false;
@@ -273,7 +305,12 @@ function handle(raw) {
   if (/\bajustes\b/.test(n)) { openSet(); return; }
   if (/(quita|cierra|oculta|esconde)\s+(las\s+)?(imagenes|fotos)/.test(n)) { hideImages(); return; }
   if (/(deja de|para de) (mirar|compartir|ver)/.test(n)) { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; speak("Hecho, ya no veo tu pantalla."); return; }
-  if (/(borra|olvida) (la )?(conversacion|chat)/.test(n)) { history = []; speak("Conversación borrada."); return; }
+  if (/(borra|olvida) (la )?(conversacion|chat|memoria)/.test(n)) { 
+    history = []; 
+    store.set("ev_history", ""); 
+    speak("Memoria y conversación borradas."); 
+    return; 
+  }
   if (!text) return;
   activeUntil = Date.now() + 25000; ask(text);
 }
