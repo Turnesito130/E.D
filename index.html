@@ -2,238 +2,251 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>E.D</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@200;300;400&display=swap" rel="stylesheet">
 <style>
-:root{--amber:#ffb000;--dim:#8a6a1f;--ink:#ffd27a;--panel:#140f04;--line:#5a4010}
+:root{--amber:#ffb347;--ember:#ff7a1a;--bone:#f6ead6;--dim:#9c8761}
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;background:radial-gradient(ellipse at 50% 25%,#1d1405,#07050a 70%);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-#app{display:flex;flex-direction:column;height:100%;max-width:760px;margin:auto;padding:12px}
-canvas{width:100%;height:36vh;min-height:190px;flex:none}
-#status{text-align:center;font-size:14px;color:var(--amber);min-height:20px}
-#log{flex:1;overflow-y:auto;padding:8px 4px;display:flex;flex-direction:column;gap:8px}
-.m{padding:8px 12px;border-radius:10px;max-width:88%;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
-.u{align-self:flex-end;background:#2a1d05;border:1px solid var(--line)}
-.a{align-self:flex-start;background:var(--panel);border:1px solid var(--amber);box-shadow:0 0 14px #ffb00030}
-.s{align-self:center;font-size:13px;color:var(--dim);text-align:center}
-form{display:flex;gap:8px;padding-top:8px}
-input,button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-input{flex:1;min-width:0}
-button{cursor:pointer}
-button:hover,input:focus-visible,button:focus-visible{border-color:var(--amber);outline:none}
-#mic.on{background:var(--amber);color:#000}
-dialog{background:var(--panel);color:var(--ink);border:1px solid var(--amber);border-radius:12px;width:min(420px,92%)}
-dialog label{display:block;margin:12px 0 4px;font-size:14px}
-dialog input{width:100%}
-dialog p{font-size:13px;color:var(--dim);line-height:1.4}
+html,body{height:100%;margin:0;background:#050302;color:var(--bone);font-family:"Exo 2","Segoe UI",system-ui,sans-serif;overflow:hidden}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:pointer;outline:none}
+#you{position:fixed;left:0;right:0;bottom:calc(20% + 70px);text-align:center;color:var(--dim);font-weight:200;font-size:1rem;padding:0 8%;min-height:1.4em}
+#sub{position:fixed;left:0;right:0;bottom:7%;text-align:center;font-weight:300;font-size:clamp(1.1rem,2.4vw,1.7rem);line-height:1.45;padding:0 10%;max-height:24%;overflow:hidden;transition:opacity 1.2s;text-shadow:0 0 18px rgba(255,150,40,.35)}
+#st{position:fixed;top:18px;left:0;right:0;text-align:center;color:var(--dim);font-weight:200;font-size:.9rem;letter-spacing:.08em}
+#set{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,92vw);background:rgba(20,12,4,.96);border:1px solid #4a3216;border-radius:16px;padding:20px;z-index:5}
+#set h2{margin:0 0 6px;font-weight:300;font-size:1.2rem}
+#set label{display:block;margin:12px 0 3px;color:var(--dim);font-size:.85rem}
+#set input{width:100%;background:#0b0703;border:1px solid #4a3216;color:var(--bone);border-radius:8px;padding:9px;font:inherit}
+#set input:focus-visible,#save:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+#set p{margin:12px 0 0;color:var(--dim);font-size:.8rem}
+#save{margin-top:14px;background:var(--amber);color:#1a0c00;border:0;border-radius:10px;padding:10px 18px;font:inherit;font-weight:400;cursor:pointer}
 </style>
 </head>
 <body>
-<div id="app">
-  <canvas id="sphere"></canvas>
-  <div id="status">Micrófono apagado</div>
-  <div id="log"></div>
-  <form>
-    <button type="button" id="mic" title="Activar escucha: di «ev»">Micrófono</button>
-    <input id="txt" placeholder="Escribe a E.D…" autocomplete="off">
-    <button type="submit">Enviar</button>
-    <button type="button" id="cfg" title="Ajustes">Ajustes</button>
-  </form>
+<canvas id="cv" tabindex="0" role="button" aria-label="E.D. Toca la esfera para despertarla"></canvas>
+<div id="st">toca la esfera para despertar a E.D</div>
+<div id="you"></div>
+<div id="sub" aria-live="polite"></div>
+
+<div id="set">
+  <h2>Ajustes de E.D</h2>
+  <label for="k1">Clave de Gemini</label>
+  <input id="k1" type="password" autocomplete="off" placeholder="AIza...">
+  <label for="mod">Modelo</label>
+  <input id="mod" type="text" placeholder="gemini-3.5-flash">
+  <label for="k2">Clave de ElevenLabs (opcional)</label>
+  <input id="k2" type="password" autocomplete="off">
+  <label for="vid">ID de voz de ElevenLabs (opcional)</label>
+  <input id="vid" type="text" autocomplete="off">
+  <p>Las claves se guardan solo en este navegador, nunca en GitHub. Para volver aquí, di «ev, ajustes».</p>
+  <button id="save">Guardar</button>
 </div>
 
-<dialog id="dlg">
-  <h3 style="margin:0">Ajustes</h3>
-  <label for="key">Clave API de Google (Gemini)</label>
-  <input id="key" type="password" autocomplete="off" placeholder="Pega tu clave aquí">
-  <label for="model">Modelo</label>
-  <input id="model" placeholder="gemini-2.5-flash">
-  <label for="elkey">Clave API de ElevenLabs (voz)</label>
-  <input id="elkey" type="password" autocomplete="off" placeholder="Pega tu clave de ElevenLabs">
-  <label for="elvoice">ID de la voz de ElevenLabs</label>
-  <input id="elvoice" placeholder="EXAVITQu4vr4xnSDxMaL (Sarah)">
-  <p>Las claves se guardan solo en este navegador. No las escribas en el código ni las subas a GitHub. Sin clave de ElevenLabs, E.D usa la voz del navegador.</p>
-  <div style="display:flex;gap:8px;justify-content:flex-end">
-    <button type="button" id="cancel">Cerrar</button>
-    <button type="button" id="save">Guardar</button>
-  </div>
-</dialog>
-
 <script>
-const $=s=>document.querySelector(s);
-const log=$('#log'),statusEl=$('#status');
-const store={get:k=>{try{return localStorage.getItem(k)||''}catch{return ''}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
-let state='idle';
-function setState(s,t){state=s;statusEl.textContent=t||({idle:'En espera. Di «ev»',listening:'Te escucho',thinking:'Pensando',speaking:'Hablando'}[s])}
-function add(cls,t){const d=document.createElement('div');d.className='m '+cls;d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight}
+const $ = id => document.getElementById(id);
+const SYS = "Eres E.D, una asistente de IA con voz de chica, estilo Jarvis. Hablas en español con frases cortas y naturales, sin markdown, listas ni símbolos, porque tu respuesta se lee en voz alta. " +
+  "El usuario estudia ingeniería mecatrónica. Si recibes una imagen de su pantalla, úsala para guiarlo paso a paso diciendo exactamente dónde pulsar. " +
+  "Nunca pidas ni repitas claves, contraseñas ni códigos de verificación.";
+const store = {
+  get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+let history = [], stream = null, started = false, busy = false, token = 0, state = "idle", activeUntil = 0, fadeT = null;
 
-/* Esfera holográfica ámbar */
-const cv=$('#sphere'),cx=cv.getContext('2d');
-const pts=[];for(let i=0;i<420;i++){const y=1-2*(i+.5)/420,r=Math.sqrt(1-y*y),a=i*2.39996;pts.push([Math.cos(a)*r,y,Math.sin(a)*r])}
-let t=0;
-function draw(){
-  const d=devicePixelRatio||1,w=cv.width=cv.clientWidth*d,h=cv.height=cv.clientHeight*d;
-  t+=.008;
-  const en={idle:.03,listening:.1,thinking:.18,speaking:.14}[state];
-  const mod=state==='speaking'?1+Math.sin(t*17)*.6:1;
-  const R=Math.min(w,h)*.34*(1+Math.sin(t*6)*en*mod);
-  cx.save();cx.translate(w/2,h/2);
-  const g=cx.createRadialGradient(0,0,R*.2,0,0,R*1.7);
-  g.addColorStop(0,'rgba(255,176,0,.18)');g.addColorStop(1,'rgba(255,176,0,0)');
-  cx.fillStyle=g;cx.fillRect(-w/2,-h/2,w,h);
-  const cs=Math.cos(t),sn=Math.sin(t),ct=Math.cos(.4),st=Math.sin(.4);
-  for(const [x,y,z] of pts){
-    const x1=x*cs+z*sn,z1=-x*sn+z*cs,y2=y*ct-z1*st,z2=y*st+z1*ct,k=(z2+1)/2;
-    cx.fillStyle=`rgba(255,${150+k*80|0},${k*60|0},${.15+k*.85})`;
-    cx.beginPath();cx.arc(x1*R,y2*R,(1+k*1.6)*d,0,7);cx.fill();
+/* ---------- Esfera ---------- */
+const cv = $("cv"), ctx = cv.getContext("2d");
+const N = 650, pts = [];
+for (let i = 0; i < N; i++) {
+  const y = 1 - 2 * (i + .5) / N, r = Math.sqrt(1 - y * y), th = i * 2.39996;
+  pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
+}
+let W, H, dpr, ang = 0, energy = .15;
+const calm = matchMedia("(prefers-reduced-motion:reduce)").matches;
+function resize() {
+  dpr = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener("resize", resize); resize();
+const target = { idle: .15, listen: .4, think: .65, speak: .95 };
+function draw(t) {
+  t /= 1000;
+  energy += (target[state] - energy) * .06;
+  const k = calm ? .3 : 1;
+  ang += (.002 + energy * .012) * k;
+  ctx.clearRect(0, 0, W, H);
+  const cx = W / 2, cy = H * .38, R = Math.min(W, H * 1.2) * .24 * (1 + (state === "speak" ? .04 * Math.sin(t * 9) : .015 * Math.sin(t * 1.6)) * k);
+  const g = ctx.createRadialGradient(cx, cy, R * .1, cx, cy, R * 2.1);
+  g.addColorStop(0, "rgba(255,160,50," + (.22 + energy * .2) + ")"); g.addColorStop(1, "rgba(255,120,20,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const ca = Math.cos(ang), sa = Math.sin(ang), ct = Math.cos(.38), st = Math.sin(.38);
+  for (const p of pts) {
+    const x1 = p[0] * ca + p[2] * sa, z1 = -p[0] * sa + p[2] * ca;
+    const y2 = p[1] * ct - z1 * st, z2 = p[1] * st + z1 * ct;
+    const rr = R * (1 + energy * .06 * Math.sin(p[1] * 8 + t * 4 + p[0] * 5) * k);
+    const f = 2.4 / (2.4 - z2), sx = cx + x1 * rr * f, sy = cy + y2 * rr * f;
+    ctx.fillStyle = "rgba(255," + (170 + z2 * 40 | 0) + ",70," + (.22 + .6 * (z2 + 1) / 2) + ")";
+    const s = .7 + (z2 + 1) * .9; ctx.fillRect(sx - s / 2, sy - s / 2, s, s);
   }
-  cx.strokeStyle='rgba(255,176,0,.5)';cx.lineWidth=d;
-  cx.beginPath();cx.arc(0,0,R*1.18,0,7);cx.stroke();
-  cx.setLineDash([6*d,10*d]);cx.beginPath();cx.arc(0,0,R*1.3,t,t+6.28);cx.stroke();
-  cx.restore();requestAnimationFrame(draw);
-}
-draw();
-
-/* Voz de chica */
-let voice=null;
-function pickVoice(){
-  const vs=speechSynthesis.getVoices().filter(v=>v.lang.toLowerCase().startsWith('es'));
-  const fem=/paulina|monica|mónica|helena|sabina|laura|lucia|lucía|elvira|dalia|female|google español/i;
-  voice=vs.find(v=>fem.test(v.name))||vs[0]||null;
-}
-speechSynthesis.onvoiceschanged=pickVoice;pickVoice();
-function speakBrowser(clean){
-  return new Promise(res=>{
-    speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(clean);
-    if(voice)u.voice=voice;
-    u.lang=voice?voice.lang:'es-ES';u.pitch=1.15;u.rate=1.02;
-    u.onend=u.onerror=()=>res();
-    setState('speaking');speechSynthesis.speak(u);
-  });
-}
-async function speakEleven(clean){
-  const k=store.get('elkey');if(!k)return false;
-  const vid=store.get('elvoice')||'EXAVITQu4vr4xnSDxMaL';
-  const r=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(vid),{
-    method:'POST',headers:{'Content-Type':'application/json','xi-api-key':k,'Accept':'audio/mpeg'},
-    body:JSON.stringify({text:clean,model_id:'eleven_multilingual_v2'})});
-  if(!r.ok){let m=r.status;try{const d=await r.json();m=d.detail?.message||d.detail?.status||m}catch{}throw new Error('ElevenLabs: '+m)}
-  const url=URL.createObjectURL(await r.blob());
-  return new Promise(res=>{
-    const a=new Audio(url);
-    a.onended=()=>{URL.revokeObjectURL(url);res(true)};
-    a.onerror=()=>{URL.revokeObjectURL(url);res(false)};
-    setState('speaking');a.play().catch(()=>res(false));
-  });
-}
-async function speak(text){
-  const clean=text.replace(/[*_`#>]/g,'').replace(/https?:\/\/\S+/g,'enlace');
-  try{if(await speakEleven(clean))return}
-  catch(e){add('s',e.message+'. Uso la voz del navegador.')}
-  return speakBrowser(clean);
-}
-
-/* Herramientas del agente */
-const TOOLS=[{functionDeclarations:[
-  {name:'abrir_web',description:'Abre una página web en una pestaña nueva',parameters:{type:'OBJECT',properties:{url:{type:'STRING'}},required:['url']}},
-  {name:'buscar_google',description:'Busca algo en Google en una pestaña nueva',parameters:{type:'OBJECT',properties:{consulta:{type:'STRING'}},required:['consulta']}},
-  {name:'buscar_youtube',description:'Busca algo en YouTube en una pestaña nueva',parameters:{type:'OBJECT',properties:{consulta:{type:'STRING'}},required:['consulta']}},
-  {name:'fecha_hora',description:'Devuelve la fecha y la hora actuales'}
-]}];
-function openTab(u){const w=window.open(u,'_blank');return w?'abierto':'bloqueado: hay que permitir ventanas emergentes para este sitio'}
-function runTool(n,a){
-  if(n==='abrir_web'){let u=a.url||'';if(!/^https?:\/\//i.test(u))u='https://'+u;return openTab(u)}
-  if(n==='buscar_google')return openTab('https://www.google.com/search?q='+encodeURIComponent(a.consulta||''));
-  if(n==='buscar_youtube')return openTab('https://www.youtube.com/results?search_query='+encodeURIComponent(a.consulta||''));
-  if(n==='fecha_hora')return new Date().toLocaleString('es-ES',{dateStyle:'full',timeStyle:'short'});
-  return 'herramienta desconocida';
-}
-
-/* Cerebro: API de Google (Gemini) */
-const hist=[];
-async function ask(text,spoken){
-  const key=store.get('key');
-  if(!key)throw new Error('Falta la clave API de Google. Abre Ajustes y pégala.');
-  const model=store.get('model')||'gemini-2.5-flash';
-  const sys='Eres E.D (se pronuncia "ev"), un asistente de IA estilo Jarvis con voz femenina. Hablas español, cercana y segura. Eres un agente: usa tus herramientas para abrir webs y buscar cuando te lo pidan. '
-    +(spoken?'Te hablan por voz: responde en 1 a 3 frases cortas, sin listas ni markdown.':'Te escriben: puedes responder con más detalle.')
-    +' Si una herramienta dice que fue bloqueada, explica que hay que permitir ventanas emergentes. Sé honesta: no puedes controlar el sistema operativo, solo abrir pestañas y buscar.';
-  const contents=[...hist,{role:'user',parts:[{text}]}];
-  for(let i=0;i<4;i++){
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
-      method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
-      body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents,tools:TOOLS})});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error?.message||r.status);
-    const parts=d.candidates?.[0]?.content?.parts||[];
-    const calls=parts.filter(p=>p.functionCall);
-    if(!calls.length){
-      const out=parts.map(p=>p.text||'').join('').trim()||'(sin respuesta)';
-      hist.push({role:'user',parts:[{text}]},{role:'model',parts:[{text:out}]});
-      if(hist.length>16)hist.splice(0,2);
-      return out;
-    }
-    contents.push({role:'model',parts});
-    contents.push({role:'user',parts:calls.map(p=>{
-      const res=runTool(p.functionCall.name,p.functionCall.args||{});
-      add('s','Acción: '+p.functionCall.name+' · '+res);
-      return {functionResponse:{name:p.functionCall.name,response:{resultado:res}}};
-    })});
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * (.12 + i * .05) * (i % 2 ? -1 : 1) * k + i * 1.05);
+    ctx.strokeStyle = "rgba(255,170,60," + (.18 + energy * .25) + ")";
+    ctx.beginPath(); ctx.ellipse(0, 0, R * (1.3 + i * .13), R * (.34 + i * .06), 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
   }
-  return 'Hice demasiadas acciones seguidas. Dime qué falta.';
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* ---------- Estado y textos ---------- */
+const labels = { idle: "te escucho", listen: "escuchando", think: "pensando", speak: "hablando" };
+function setState(s) {
+  state = s; $("st").textContent = started ? labels[s] : $("st").textContent;
+  if (s === "speak") pauseRec(); else if (started) resumeRec();
+}
+function showSub(t, keep) {
+  clearTimeout(fadeT); $("sub").style.opacity = 1; $("sub").textContent = t;
+  if (!keep) fadeT = setTimeout(() => { $("sub").style.opacity = 0; }, 7000);
 }
 
-let busy=false;
-async function handle(text,spoken){
-  if(busy)return;busy=true;
-  add('u',text);setState('thinking');
-  try{const reply=await ask(text,spoken);add('a',reply);if(spoken)await speak(reply)}
-  catch(e){add('s','Error: '+e.message)}
-  setTimeout(()=>{busy=false;setState('idle',wantMic?undefined:'Micrófono apagado')},500);
-}
-
-/* Escucha con palabra de activación */
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let rec=null,wantMic=false,awake=false,awakeTimer=null;
-const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[.,;:!?¿¡]/g,' ').replace(/\s+/g,' ').trim();
-const WAKE=/\b(?:(?:oye|ey|hey|hola)\s+)?(?:ev|eve|ed|e d|e de|ede|eb)\b\s*(.*)$/;
-function startRec(){
-  if(!SR){add('s','Este navegador no tiene reconocimiento de voz. Usa Chrome.');return}
-  rec=new SR();rec.lang='es-ES';rec.continuous=true;rec.interimResults=false;
-  rec.onresult=e=>{
-    if(busy)return;
-    const n=norm(e.results[e.results.length-1][0].transcript);
-    const m=n.match(WAKE);
-    let cmd=m?m[1]:(awake?n:null);
-    if(cmd===null)return;
-    if(cmd.length<2){
-      awake=true;setState('listening');clearTimeout(awakeTimer);
-      awakeTimer=setTimeout(()=>{awake=false;if(!busy)setState('idle')},8000);return;
-    }
-    awake=false;clearTimeout(awakeTimer);handle(cmd,true);
-  };
-  rec.onend=()=>{if(wantMic)setTimeout(()=>{try{rec.start()}catch{}},300)};
-  rec.onerror=e=>{
-    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-      wantMic=false;$('#mic').classList.remove('on');setState('idle','Micrófono apagado');
-      add('s','Permiso de micrófono denegado. Actívalo en el candado de la barra de direcciones.');
-    }
-  };
-  try{rec.start()}catch{}
-}
-$('#mic').onclick=()=>{
-  wantMic=!wantMic;$('#mic').classList.toggle('on',wantMic);
-  if(wantMic){startRec();setState('idle')}
-  else{try{rec.stop()}catch{};setState('idle','Micrófono apagado')}
+/* ---------- Ajustes ---------- */
+["k1", "mod", "k2", "vid"].forEach(i => $(i).value = store.get("ed_" + i));
+function openSet() { $("set").style.display = "block"; $("k1").focus(); }
+$("save").onclick = () => {
+  ["k1", "mod", "k2", "vid"].forEach(i => store.set("ed_" + i, $(i).value.trim()));
+  $("set").style.display = "none"; showSub("Listo, guardado.");
 };
 
-/* Chat escrito y ajustes */
-$('form').onsubmit=e=>{e.preventDefault();const i=$('#txt'),v=i.value.trim();if(v){i.value='';handle(v,false)}};
-$('#cfg').onclick=()=>{$('#key').value=store.get('key');$('#model').value=store.get('model');$('#elkey').value=store.get('elkey');$('#elvoice').value=store.get('elvoice');$('#dlg').showModal()};
-$('#cancel').onclick=()=>$('#dlg').close();
-$('#save').onclick=()=>{store.set('key',$('#key').value.trim());store.set('model',$('#model').value.trim());store.set('elkey',$('#elkey').value.trim());store.set('elvoice',$('#elvoice').value.trim());$('#dlg').close();add('s','Ajustes guardados.')};
-add('s','Abre Ajustes y pega tu clave de Google. Luego pulsa Micrófono y di «ev» seguido de lo que quieras.');
-if(!store.get('key'))$('#dlg').showModal&&setTimeout(()=>$('#cfg').click(),400);
+/* ---------- Pantalla ---------- */
+const vid = document.createElement("video"); vid.muted = true; vid.playsInline = true;
+async function shareScreen() {
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    vid.srcObject = stream; await vid.play();
+    stream.getVideoTracks()[0].onended = () => { stream = null; };
+    return true;
+  } catch (e) { stream = null; return false; }
+}
+function frame() {
+  const c = document.createElement("canvas"), w = Math.min(1280, vid.videoWidth || 1280);
+  c.width = w; c.height = Math.round((vid.videoHeight || 720) * w / (vid.videoWidth || 1280));
+  c.getContext("2d").drawImage(vid, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", .6).split(",")[1];
+}
+const wantsScreen = /pantalla|mira|ves |ver |esto|aqu[ií]|d[oó]nde|pulso|clic|click|error|ayuda|leer?|dice/i;
+
+/* ---------- Voz de salida ---------- */
+let chain = Promise.resolve(), audio = null;
+function stopVoice() { token++; chain = Promise.resolve(); if (audio) { audio.pause(); audio = null; } speechSynthesis.cancel(); }
+function pickVoice() {
+  const v = speechSynthesis.getVoices().filter(x => /^es/i.test(x.lang));
+  return v.find(x => /female|mujer|paulina|helena|sabina|monica|elena|google español/i.test(x.name)) || v[0];
+}
+function speak(raw) {
+  const t = raw.replace(/[*_`#>]/g, "").trim(); if (!t) return;
+  const my = token, k = store.get("ed_k2"), v = store.get("ed_vid");
+  if (k && v) {
+    const p = fetch("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(v) + "?output_format=mp3_44100_64", {
+      method: "POST", headers: { "xi-api-key": k, "Content-Type": "application/json" },
+      body: JSON.stringify({ text: t, model_id: "eleven_flash_v2_5" })
+    }).then(r => r.ok ? r.blob() : Promise.reject(new Error("ElevenLabs " + r.status))).then(b => URL.createObjectURL(b)).catch(e => { showSub(e.message); return null; });
+    chain = chain.then(async () => {
+      const url = await p; if (!url || my !== token) return;
+      setState("speak");
+      await new Promise(res => { audio = new Audio(url); audio.onended = audio.onerror = res; audio.play().catch(res); });
+      if (my === token) doneSpeaking();
+    });
+  } else {
+    const u = new SpeechSynthesisUtterance(t); u.lang = "es-ES"; u.rate = 1.08;
+    const vo = pickVoice(); if (vo) u.voice = vo;
+    u.onstart = () => setState("speak");
+    u.onend = () => { if (!speechSynthesis.speaking) doneSpeaking(); };
+    speechSynthesis.speak(u);
+  }
+}
+function doneSpeaking() { activeUntil = Date.now() + 25000; setState("idle"); }
+
+/* ---------- Gemini en streaming ---------- */
+async function ask(text) {
+  if (busy) return; const key = store.get("ed_k1");
+  if (!key) { openSet(); showSub("Necesito tu clave de Gemini."); return; }
+  busy = true; stopVoice(); $("you").textContent = text; setState("think"); showSub("…", true);
+  const model = store.get("ed_mod") || "gemini-3.5-flash", parts = [{ text }];
+  if (stream && wantsScreen.test(text)) parts.push({ inline_data: { mime_type: "image/jpeg", data: frame() } });
+  else if (!stream && /pantalla/i.test(text)) { busy = false; setState("idle"); speak("Toca la esfera y elige tu pantalla para que pueda verla."); showSub("Toca la esfera para compartir tu pantalla."); return; }
+  const gen = { maxOutputTokens: 600 };
+  if (model.includes("2.5")) gen.thinkingConfig = { thinkingBudget: 0 };
+  let full = "", pend = "";
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":streamGenerateContent?alt=sse", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({ system_instruction: { parts: [{ text: SYS }] }, contents: [...history, { role: "user", parts }], generationConfig: gen })
+    });
+    if (!r.ok) throw new Error("Gemini " + r.status);
+    const rd = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+    while (true) {
+      const { done, value } = await rd.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n"); buf = lines.pop();
+      for (const l of lines) {
+        if (!l.startsWith("data:")) continue;
+        let j; try { j = JSON.parse(l.slice(5)); } catch (e) { continue; }
+        const c = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
+        if (!c) continue;
+        full += c; pend += c; showSub(full, true);
+        let m; while ((m = pend.match(/^[\s\S]*?[.!?\n](\s|$)/))) { speak(m[0]); pend = pend.slice(m[0].length); }
+      }
+    }
+    if (pend.trim()) speak(pend);
+    if (!full) { showSub("No recibí respuesta."); setState("idle"); }
+    history.push({ role: "user", parts: [{ text }] }, { role: "model", parts: [{ text: full }] });
+    history = history.slice(-20); showSub(full);
+  } catch (e) { showSub("Error: " + e.message); setState("idle"); }
+  busy = false;
+}
+
+/* ---------- Micrófono siempre atento ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, paused = false;
+const wake = /^\s*(hey|oye|ok|hola)?\s*,?\s*(ev|eve|ebe|ed|e\.?d\.?|e de|ede|eb)\b[\s,.:!?]*/i;
+const norm = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function handle(raw) {
+  let text = raw.trim(), woke = false;
+  const m = text.match(wake); if (m) { woke = true; text = text.slice(m[0].length).trim(); }
+  if (!woke && Date.now() > activeUntil) return;
+  const n = norm(text);
+  if (woke && !text) { activeUntil = Date.now() + 25000; stopVoice(); speak("Dime."); return; }
+  if (/\bajustes\b/.test(n)) { openSet(); return; }
+  if (/(deja de|para de) (mirar|compartir|ver)/.test(n)) { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; speak("Hecho, ya no veo tu pantalla."); return; }
+  if (/(borra|olvida) (la )?(conversacion|chat)/.test(n)) { history = []; speak("Conversación borrada."); return; }
+  if (!text) return;
+  activeUntil = Date.now() + 25000; ask(text);
+}
+function startRec() {
+  if (!SR) { showSub("Este navegador no permite escuchar. Usa Chrome."); return; }
+  if (rec) return;
+  rec = new SR(); rec.lang = "es-ES"; rec.continuous = true; rec.interimResults = false;
+  rec.onstart = () => { if (state === "idle") $("st").textContent = "te escucho"; };
+  rec.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) handle(e.results[i][0].transcript); };
+  rec.onerror = e => { if (e.error === "not-allowed") showSub("Permite el micrófono en Chrome."); };
+  rec.onend = () => { rec = null; if (started && !paused) setTimeout(startRec, 250); };
+  try { rec.start(); } catch (e) { rec = null; }
+}
+function pauseRec() { paused = true; if (rec) try { rec.stop(); } catch (e) {} }
+function resumeRec() { if (!paused) return; paused = false; if (started) startRec(); }
+
+/* ---------- Un solo toque ---------- */
+async function tap() {
+  if (!started) {
+    started = true; $("st").textContent = "te escucho";
+    await shareScreen(); startRec();
+    speak(store.get("ed_k1") ? "Hola, soy E.D. Te escucho." : "Hola, soy E.D. Primero necesito tu clave de Gemini.");
+    if (!store.get("ed_k1")) openSet();
+  } else if (state === "speak") { stopVoice(); setState("idle"); }
+  else if (!stream) { await shareScreen(); }
+}
+cv.addEventListener("click", tap);
+cv.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(); } });
+speechSynthesis.onvoiceschanged = () => {};
 </script>
 </body>
 </html>
