@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>E.D</title>
+<title>ev</title>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@200;300;400&display=swap" rel="stylesheet">
 <style>
 :root{--amber:#ffb347;--ember:#ff7a1a;--bone:#f6ead6;--dim:#9c8761}
@@ -33,25 +33,34 @@ canvas{position:fixed;inset:0;width:100%;height:100%;cursor:pointer;outline:none
 #cin{flex:1;min-width:0;background:#0b0703;border:1px solid #4a3216;color:var(--bone);border-radius:8px;padding:8px;font:inherit}
 #cin:focus-visible,#cform button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 #cform button{background:var(--amber);color:#1a0c00;border:0;border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+#gal{display:none;position:fixed;top:64px;left:4%;right:max(190px,18vw);bottom:34%;overflow-y:auto;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));grid-auto-rows:minmax(130px,1fr);gap:10px;z-index:3}
+#gal.on{display:grid}
+#gal a{display:block;position:relative;border-radius:12px;overflow:hidden;border:1px solid #4a3216;background:#120c05}
+#gal img{width:100%;height:100%;object-fit:cover;display:block}
+#gal span{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 5px;font-size:.72rem;color:var(--bone);background:linear-gradient(transparent,rgba(5,3,2,.85))}
+#bImg{display:none}
+#bImg.on{display:block}
 </style>
 </head>
 <body>
-<canvas id="cv" tabindex="0" role="button" aria-label="E.D. Toca la esfera para despertarla"></canvas>
-<div id="st">toca la esfera para despertar a E.D</div>
+<canvas id="cv" tabindex="0" role="button" aria-label="ev. Toca la esfera para despertarla"></canvas>
+<div id="st">toca la esfera para despertar a ev</div>
 <div id="you"></div>
 <div id="sub" aria-live="polite"></div>
 
+<div id="gal" aria-label="Imágenes"></div>
 <div id="dock">
+  <button id="bImg" aria-label="Quitar imágenes" title="Quitar imágenes">&#10005;</button>
   <button id="bCfg" aria-label="Ajustes" title="Ajustes">&#9881;</button>
-  <button id="bTxt" aria-label="Escribir a E.D" title="Escribir a E.D">&#9998;</button>
+  <button id="bTxt" aria-label="Escribir a ev" title="Escribir a ev">&#9998;</button>
 </div>
 <div id="chat">
   <div id="clog" aria-live="polite"></div>
-  <form id="cform"><input id="cin" type="text" autocomplete="off" placeholder="Escribe a E.D..." aria-label="Mensaje para E.D"><button type="submit">Enviar</button></form>
+  <form id="cform"><input id="cin" type="text" autocomplete="off" placeholder="Escribe a ev..." aria-label="Mensaje para ev"><button type="submit">Enviar</button></form>
 </div>
 
 <div id="set">
-  <h2>Ajustes de E.D</h2>
+  <h2>Ajustes de ev</h2>
   <label for="k1">Clave de Gemini</label>
   <input id="k1" type="password" autocomplete="off" placeholder="AIza...">
   <label for="mod">Modelo</label>
@@ -66,9 +75,10 @@ canvas{position:fixed;inset:0;width:100%;height:100%;cursor:pointer;outline:none
 
 <script>
 const $ = id => document.getElementById(id);
-const SYS = "Eres E.D, una asistente de IA con voz de chica, estilo Jarvis. Hablas en español con frases cortas y naturales, sin markdown, listas ni símbolos, porque tu respuesta se lee en voz alta. " +
+const SYS = "Eres ev, una asistente de IA con voz de chica, estilo Jarvis. Hablas en español con frases cortas y naturales, sin markdown, listas ni símbolos, porque tu respuesta se lee en voz alta. " +
   "El usuario estudia ingeniería mecatrónica. Si recibes una imagen de su pantalla, úsala para guiarlo paso a paso diciendo exactamente dónde pulsar. " +
-  "Nunca pidas ni repitas claves, contraseñas ni códigos de verificación.";
+  "Nunca pidas ni repitas claves, contraseñas ni códigos de verificación. " +
+  "Tu nombre se escribe siempre «ev», en minúsculas. Si la explicación mejora viendo imágenes (un componente, un circuito, una pieza, un lugar, un animal), o si el usuario pide ver imágenes o fotos, termina con una última línea exacta [[imagenes: dos o tres palabras clave en inglés]] sin comentarla. Si no hacen falta imágenes, no pongas esa línea.";
 const store = {
   get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -119,7 +129,15 @@ function render(c, w, h, d, t, fx, fy, base) {
     c.beginPath(); c.ellipse(0, 0, R * (1.3 + i * .13), R * (.34 + i * .06), 0, 0, Math.PI * 2); c.stroke(); c.restore();
   }
 }
-function loopMain(t) { step(t); render(ctx, W, H, dpr, t, .5, .38, Math.min(W, H * 1.2) * .24); requestAnimationFrame(loopMain); }
+let imgMode = false, Lk = 1, Lx = .5, Ly = .38;
+function loopMain(t) {
+  step(t);
+  const m = Math.min(W, H * 1.2) * .24, rs = m * .32;
+  const tk = imgMode ? .32 : 1, tx = imgMode ? 1 - (rs * 1.7 + 24) / W : .5, ty = imgMode ? (rs * 1.7 + 56) / H : .38;
+  Lk += (tk - Lk) * .08; Lx += (tx - Lx) * .08; Ly += (ty - Ly) * .08;
+  render(ctx, W, H, dpr, t, Lx, Ly, m * Lk);
+  requestAnimationFrame(loopMain);
+}
 requestAnimationFrame(loopMain);
 
 /* ---------- Estado y textos ---------- */
@@ -202,14 +220,14 @@ function doneSpeaking() { activeUntil = Date.now() + 25000; setState("idle"); }
 async function ask(text, byText) {
   if (busy) return; viaText = !!byText; const key = store.get("ed_k1");
   if (!key) { openSet(); showSub("Necesito tu clave de Gemini."); return; }
-  busy = true; stopVoice(); $("you").textContent = text; setState("think"); showSub("…", true);
+  busy = true; stopVoice(); hideImages(); $("you").textContent = text; setState("think"); showSub("…", true);
   if (byText) { addMsg("u", text); bub = addMsg("e", "…"); } else bub = null;
   const model = store.get("ed_mod") || "gemini-3.5-flash", parts = [{ text }];
   if (stream && wantsScreen.test(text)) parts.push({ inline_data: { mime_type: "image/jpeg", data: await frame() } });
   else if (!stream && /pantalla/i.test(text)) { busy = false; setState("idle"); speak("Toca la esfera y elige tu pantalla para que pueda verla."); if (bub) bub.textContent = "Toca la esfera y elige tu pantalla para que pueda verla."; showSub("Toca la esfera para compartir tu pantalla."); return; }
   const gen = { maxOutputTokens: 600 };
   if (model.includes("2.5")) gen.thinkingConfig = { thinkingBudget: 0 };
-  let full = "", pend = "";
+  let full = "", pend = "", vis = "", sent = 0;
   try {
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":streamGenerateContent?alt=sse", {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
@@ -226,15 +244,16 @@ async function ask(text, byText) {
         let j; try { j = JSON.parse(l.slice(5)); } catch (e) { continue; }
         const c = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
         if (!c) continue;
-        full += c; pend += c; showSub(full, true);
-        if (bub) { bub.textContent = full; $("clog").scrollTop = 1e9; }
+        full += c; vis = full.split("[[")[0].replace(/\[$/, ""); pend += vis.slice(sent); sent = vis.length; showSub(vis, true);
+        if (bub) { bub.textContent = vis; $("clog").scrollTop = 1e9; }
         let m; while ((m = pend.match(/^[\s\S]*?[.!?\n](\s|$)/))) { speak(m[0]); pend = pend.slice(m[0].length); }
       }
     }
     if (pend.trim()) speak(pend);
     if (!full) { if (bub) bub.textContent = "No recibí respuesta."; showSub("No recibí respuesta."); setState("idle"); }
-    history.push({ role: "user", parts: [{ text }] }, { role: "model", parts: [{ text: full }] });
-    history = history.slice(-20); showSub(full);
+    history.push({ role: "user", parts: [{ text }] }, { role: "model", parts: [{ text: vis }] });
+    history = history.slice(-20); showSub(vis);
+    const mk = full.match(/\[\[\s*im[aá]genes?\s*:\s*([^\]]+)\]\]/i); if (mk) showImages(mk[1]);
   } catch (e) { if (bub) bub.textContent = "Error: " + e.message; showSub("Error: " + e.message); setState("idle"); }
   busy = false;
 }
@@ -252,6 +271,7 @@ function handle(raw) {
   const n = norm(text);
   if (woke && !text) { activeUntil = Date.now() + 25000; stopVoice(); speak("Dime."); return; }
   if (/\bajustes\b/.test(n)) { openSet(); return; }
+  if (/(quita|cierra|oculta|esconde)\s+(las\s+)?(imagenes|fotos)/.test(n)) { hideImages(); return; }
   if (/(deja de|para de) (mirar|compartir|ver)/.test(n)) { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; speak("Hecho, ya no veo tu pantalla."); return; }
   if (/(borra|olvida) (la )?(conversacion|chat)/.test(n)) { history = []; speak("Conversación borrada."); return; }
   if (!text) return;
@@ -277,7 +297,7 @@ async function openPip() {
   try {
     const win = await documentPictureInPicture.requestWindow({ width: 300, height: 380 });
     const d = win.document;
-    d.head.innerHTML = '<meta charset="utf-8"><title>E.D</title>';
+    d.head.innerHTML = '<meta charset="utf-8"><title>ev</title>';
     const css = d.createElement("style");
     css.textContent = "html,body{margin:0;height:100%;background:#050302;color:#f6ead6;font-family:'Exo 2','Segoe UI',system-ui,sans-serif;overflow:hidden}canvas{position:absolute;left:0;top:0;width:100%;height:60%}#s{position:absolute;left:0;right:0;bottom:0;height:40%;padding:6px 14px;text-align:center;font-weight:300;font-size:15px;line-height:1.4;overflow:hidden;text-shadow:0 0 12px rgba(255,150,40,.35)}";
     d.head.appendChild(css);
@@ -301,6 +321,29 @@ async function openPip() {
 }
 try { navigator.mediaSession.setActionHandler("enterpictureinpicture", () => { if (!pip) openPip(); }); } catch (e) {}
 
+/* ---------- Imágenes ---------- */
+function hideImages() { imgMode = false; $("gal").classList.remove("on"); $("bImg").classList.remove("on"); }
+async function showImages(q) {
+  q = (q || "").trim(); if (!q) return;
+  try {
+    const u = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=10&gsrsearch=" + encodeURIComponent(q) + "&prop=imageinfo&iiprop=url|mime&iiurlwidth=640&format=json&origin=*";
+    const j = await (await fetch(u)).json();
+    const list = Object.values((j.query && j.query.pages) || {}).sort((a, b) => a.index - b.index)
+      .map(p => ({ i: p.imageinfo && p.imageinfo[0], t: p.title.replace(/^File:/, "").replace(/\.[a-z0-9]+$/i, "") }))
+      .filter(x => x.i && x.i.thumburl && /^image\/(jpeg|png|webp|gif|svg\+xml)/.test(x.i.mime)).slice(0, 6);
+    if (!list.length) return;
+    const g = $("gal"); g.innerHTML = "";
+    for (const x of list) {
+      const a = document.createElement("a"); a.href = x.i.descriptionurl || x.i.url; a.target = "_blank"; a.rel = "noopener"; a.title = x.t + " (Wikimedia Commons)";
+      const im = document.createElement("img"); im.src = x.i.thumburl; im.alt = x.t; im.loading = "lazy";
+      const sp = document.createElement("span"); sp.textContent = x.t;
+      a.append(im, sp); g.appendChild(a);
+    }
+    g.classList.add("on"); $("bImg").classList.add("on"); imgMode = true;
+  } catch (e) {}
+}
+$("bImg").onclick = hideImages;
+
 /* ---------- Botones pequeños ---------- */
 function addMsg(cls, t) {
   const d = document.createElement("div"); d.className = "cm " + cls; d.textContent = t;
@@ -318,7 +361,7 @@ async function tap() {
   if (!started) {
     started = true; $("st").textContent = "te escucho";
     await shareScreen(); startRec();
-    speak(store.get("ed_k1") ? "Hola, soy E.D. Te escucho." : "Hola, soy E.D. Primero necesito tu clave de Gemini.");
+    speak(store.get("ed_k1") ? "Hola, soy ev. Te escucho." : "Hola, soy ev. Primero necesito tu clave de Gemini.");
     if (!store.get("ed_k1")) openSet();
   } else if (state === "speak") { stopVoice(); setState("idle"); }
   else if (!stream) { await shareScreen(); }
