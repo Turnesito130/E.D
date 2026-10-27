@@ -1,335 +1,43 @@
-<script>
-const $ = id => document.getElementById(id);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ev - J.A.R.V.I.S.</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@200;300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv" tabindex="0" role="button" aria-label="ev. Toca la esfera para despertarla"></canvas>
+<div id="st">toca la esfera para despertar a ev</div>
+<div id="you"></div>
+<div id="sub" aria-live="polite"></div>
 
-const store = {
-  get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
-  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
-};
+<div id="gal" aria-label="Imágenes"></div>
+<div id="dock">
+  <button id="bImg" aria-label="Quitar imágenes" title="Quitar imágenes">&#10005;</button>
+  <button id="bCfg" aria-label="Ajustes" title="Ajustes">&#9881;</button>
+  <button id="bTxt" aria-label="Escribir a ev" title="Escribir a ev">&#9998;</button>
+</div>
+<div id="chat">
+  <div id="clog" aria-live="polite"></div>
+  <form id="cform"><input id="cin" type="text" autocomplete="off" placeholder="Escribe a ev..." aria-label="Mensaje para ev"><button type="submit">Enviar</button></form>
+</div>
 
-/* --- MEMORIA PERSISTENTE BLINDADA --- */
-let history = [];
-try {
-  const saved = store.get("ev_history");
-  if (saved) {
-    history = JSON.parse(saved);
-  }
-} catch (e) {
-  history = [];
-}
+<div id="set">
+  <h2>Ajustes de ev (J.A.R.V.I.S.)</h2>
+  <label for="k1">Clave de Gemini</label>
+  <input id="k1" type="password" autocomplete="off" placeholder="AIza...">
+  <label for="mod">Modelo</label>
+  <input id="mod" type="text" placeholder="gemini-1.5-flash">
+  <label for="k2">Clave de ElevenLabs (opcional)</label>
+  <input id="k2" type="password" autocomplete="off">
+  <label for="vid">ID de voz de ElevenLabs (opcional)</label>
+  <input id="vid" type="text" autocomplete="off">
+  <p>Las claves se guardan solo en este navegador. Servidor local en http://localhost:8000.</p>
+  <button id="save">Guardar</button>
+</div>
 
-function saveHistory() {
-  try {
-    // Mantiene los últimos 20 mensajes para no saturar la memoria local
-    store.set("ev_history", JSON.stringify(history.slice(-20)));
-  } catch (e) {}
-}
-
-let stream = null, started = false, busy = false, token = 0, state = "idle", activeUntil = 0, fadeT = null, pip = null, viaText = false, bub = null;
-
-function getSystemPrompt() {
-  return "Eres ev, una asistente de IA autónoma con voz de chica, estilo Jarvis. Hablas en español con frases cortas, inteligentes y naturales, sin usar jamás markdown, listas ni símbolos de ningún tipo, ya que tus respuestas se leen directamente en voz alta.\n\n" +
-    "MANDATO DE INTELIGENCIA Y MEMORIA:\n" +
-    "- Tienes memoria activa de todo lo que has hablado con el usuario en esta y en anteriores sesiones (guardada en tu historial).\n" +
-    "- El usuario estudia ingeniería mecatrónica y programa sus propios proyectos (como esta app ev).\n" +
-    "- Recuerda detalles de lo que te ha contado previamente y demuestra interés técnico en sus proyectos de forma fluida.\n" +
-    "- Si recibes una captura de pantalla, analízala con precisión para guiarlo paso a paso indicando exactamente dónde pulsar.\n" +
-    "- Tu nombre se escribe siempre «ev», en minúsculas.\n" +
-    "- Si la explicación mejora con imágenes (componentes, esquemas, circuitos, hardware), o si pide ver fotos, concluye con la línea exacta: [[imagenes: palabras clave en ingles]].\n" +
-    "- Nunca pidas ni repitas contraseñas ni claves de seguridad.";
-}
-
-/* ---------- Esfera ---------- */
-const cv = $("cv"), ctx = cv.getContext("2d");
-const N = 650, pts = [];
-for (let i = 0; i < N; i++) {
-  const y = 1 - 2 * (i + .5) / N, r = Math.sqrt(1 - y * y), th = i * 2.39996;
-  pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
-}
-let W, H, dpr, ang = 0, energy = .15, lastT = 0;
-const calm = matchMedia("(prefers-reduced-motion:reduce)").matches;
-function resize() {
-  dpr = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight;
-  cv.width = W * dpr; cv.height = H * dpr;
-}
-addEventListener("resize", resize); resize();
-const target = { idle: .15, listen: .4, think: .65, speak: .95 };
-function step(t) {
-  if (t <= lastT) return;
-  const dt = Math.min(50, t - lastT); lastT = t;
-  energy += (target[state] - energy) * (1 - Math.exp(-dt / 250));
-  ang += (.12 + energy * .7) * (calm ? .3 : 1) * dt / 1000;
-}
-function render(c, w, h, d, t, fx, fy, base) {
-  t /= 1000; const k = calm ? .3 : 1;
-  c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h);
-  const cx = w * fx, cy = h * fy, R = base * (1 + (state === "speak" ? .04 * Math.sin(t * 9) : .015 * Math.sin(t * 1.6)) * k);
-  const g = c.createRadialGradient(cx, cy, R * .1, cx, cy, R * 2.1);
-  g.addColorStop(0, "rgba(255,160,50," + (.22 + energy * .2) + ")"); g.addColorStop(1, "rgba(255,120,20,0)");
-  c.fillStyle = g; c.fillRect(0, 0, w, h);
-  const ca = Math.cos(ang), sa = Math.sin(ang), ct = Math.cos(.38), st = Math.sin(.38);
-  for (const p of pts) {
-    const x1 = p[0] * ca + p[2] * sa, z1 = -p[0] * sa + p[2] * ca;
-    const y2 = p[1] * ct - z1 * st, z2 = p[1] * st + z1 * ct;
-    const rr = R * (1 + energy * .06 * Math.sin(p[1] * 8 + t * 4 + p[0] * 5) * k);
-    const f = 2.4 / (2.4 - z2), sx = cx + x1 * rr * f, sy = cy + y2 * rr * f;
-    c.fillStyle = "rgba(255," + (170 + z2 * 40 | 0) + ",70," + (.22 + .6 * (z2 + 1) / 2) + ")";
-    const sz = .7 + (z2 + 1) * .9; c.fillRect(sx - sz / 2, sy - sz / 2, sz, sz);
-  }
-  c.lineWidth = 1;
-  for (let i = 0; i < 3; i++) {
-    c.save(); c.translate(cx, cy); c.rotate(t * (.12 + i * .05) * (i % 2 ? -1 : 1) * k + i * 1.05);
-    c.strokeStyle = "rgba(255,170,60," + (.18 + energy * .25) + ")";
-    c.beginPath(); c.ellipse(0, 0, R * (1.3 + i * .13), R * (.34 + i * .06), 0, 0, Math.PI * 2); c.stroke(); c.restore();
-  }
-}
-let imgMode = false, Lk = 1, Lx = .5, Ly = .38;
-function loopMain(t) {
-  step(t);
-  const m = Math.min(W, H * 1.2) * .24, rs = m * .32;
-  const tk = imgMode ? .32 : 1, tx = imgMode ? 1 - (rs * 1.7 + 24) / W : .5, ty = imgMode ? (rs * 1.7 + 56) / H : .38;
-  Lk += (tk - Lk) * .08; Lx += (tx - Lx) * .08; Ly += (ty - Ly) * .08;
-  render(ctx, W, H, dpr, t, Lx, Ly, m * Lk);
-  requestAnimationFrame(loopMain);
-}
-requestAnimationFrame(loopMain);
-
-/* ---------- Estado y textos ---------- */
-const labels = { idle: "te escucho", listen: "escuchando", think: "pensando", speak: "hablando" };
-function setState(s) {
-  state = s; $("st").textContent = started ? labels[s] : $("st").textContent;
-  if (s === "speak") pauseRec(); else if (started) resumeRec();
-}
-function setSubs(o, t) {
-  [$("sub"), pip && pip.sub].forEach(e => { if (!e) return; e.style.opacity = o; if (t !== undefined) e.textContent = t; });
-}
-function showSub(t, keep) {
-  clearTimeout(fadeT); setSubs(1, t);
-  if (!keep) fadeT = setTimeout(() => setSubs(0), 7000);
-}
-
-/* ---------- Ajustes ---------- */
-["k1", "mod", "k2", "vid"].forEach(i => $(i).value = store.get("ed_" + i));
-function openSet() { $("set").style.display = "block"; $("k1").focus(); }
-$("save").onclick = () => {
-  ["k1", "mod", "k2", "vid"].forEach(i => store.set("ed_" + i, $(i).value.trim()));
-  $("set").style.display = "none"; showSub("Listo, guardado.");
-};
-
-/* ---------- Pantalla ---------- */
-const vid = document.createElement("video"); vid.muted = true; vid.playsInline = true;
-async function shareScreen() {
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "monitor" }, audio: false, selfBrowserSurface: "exclude", monitorTypeSurfaces: "include" });
-    vid.srcObject = stream; await vid.play();
-    stream.getVideoTracks()[0].onended = () => { stream = null; };
-    return true;
-  } catch (e) { stream = null; return false; }
-}
-async function frame() {
-  let src = null, sw = 0, sh = 0;
-  try {
-    if (window.ImageCapture) { src = await new ImageCapture(stream.getVideoTracks()[0]).grabFrame(); sw = src.width; sh = src.height; }
-  } catch (e) { src = null; }
-  if (!src) { src = vid; sw = vid.videoWidth || 1280; sh = vid.videoHeight || 720; }
-  const c = document.createElement("canvas"), w = Math.min(1280, sw);
-  c.width = w; c.height = Math.round(sh * w / sw);
-  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", .6).split(",")[1];
-}
-const wantsScreen = /pantalla|mira|ves |ver |esto|aqu[ií]|d[oó]nde|pulso|clic|click|error|ayuda|leer?|dice/i;
-
-/* ---------- Voz de salida ---------- */
-let chain = Promise.resolve(), audio = null;
-function stopVoice() { token++; chain = Promise.resolve(); if (audio) { audio.pause(); audio = null; } speechSynthesis.cancel(); }
-function pickVoice() {
-  const v = speechSynthesis.getVoices().filter(x => /^es/i.test(x.lang));
-  return v.find(x => /female|mujer|paulina|helena|sabina|monica|elena|google español/i.test(x.name)) || v[0];
-}
-function speak(raw) {
-  const t = raw.replace(/[*_`#>]/g, "").trim(); if (!t || viaText) return;
-  const my = token, k = store.get("ed_k2"), v = store.get("ed_vid");
-  if (k && v) {
-    const p = fetch("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(v) + "?output_format=mp3_44100_64", {
-      method: "POST", headers: { "xi-api-key": k, "Content-Type": "application/json" },
-      body: JSON.stringify({ text: t, model_id: "eleven_flash_v2_5" })
-    }).then(r => r.ok ? r.blob() : Promise.reject(new Error("ElevenLabs " + r.status))).then(b => URL.createObjectURL(b)).catch(e => { showSub(e.message); return null; });
-    chain = chain.then(async () => {
-      const url = await p; if (!url || my !== token) return;
-      setState("speak");
-      await new Promise(res => { audio = new Audio(url); audio.onended = audio.onerror = res; audio.play().catch(res); });
-      if (my === token) doneSpeaking();
-    });
-  } else {
-    const u = new SpeechSynthesisUtterance(t); u.lang = "es-ES"; u.rate = 1.08;
-    const vo = pickVoice(); if (vo) u.voice = vo;
-    u.onstart = () => setState("speak");
-    u.onend = () => { if (!speechSynthesis.speaking) doneSpeaking(); };
-    speechSynthesis.speak(u);
-  }
-}
-function doneSpeaking() { activeUntil = Date.now() + 25000; setState("idle"); }
-
-/* ---------- Gemini en streaming ---------- */
-async function ask(text, byText) {
-  if (busy) return; viaText = !!byText; const key = store.get("ed_k1");
-  if (!key) { openSet(); showSub("Necesito tu clave de Gemini."); return; }
-  busy = true; stopVoice(); hideImages(); $("you").textContent = text; setState("think"); showSub("…", true);
-  if (byText) { addMsg("u", text); bub = addMsg("e", "…"); } else bub = null;
-  const model = store.get("ed_mod") || "gemini-3.5-flash", parts = [{ text }];
-  if (stream && wantsScreen.test(text)) parts.push({ inline_data: { mime_type: "image/jpeg", data: await frame() } });
-  else if (!stream && /pantalla/i.test(text)) { busy = false; setState("idle"); speak("Toca la esfera y elige tu pantalla para que pueda verla."); if (bub) bub.textContent = "Toca la esfera y elige tu pantalla para que pueda verla."; showSub("Toca la esfera para compartir tu pantalla."); return; }
-  const gen = { maxOutputTokens: 600 };
-  if (model.includes("2.5")) gen.thinkingConfig = { thinkingBudget: 0 };
-  let full = "", pend = "", vis = "", sent = 0;
-  try {
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":streamGenerateContent?alt=sse", {
-      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({ system_instruction: { parts: [{ text: getSystemPrompt() }] }, contents: [...history, { role: "user", parts }], generationConfig: gen })
-    });
-    if (!r.ok) throw new Error("Gemini " + r.status);
-    const rd = r.body.getReader(), dec = new TextDecoder(); let buf = "";
-    while (true) {
-      const { done, value } = await rd.read(); if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split("\n"); buf = lines.pop();
-      for (const l of lines) {
-        if (!l.startsWith("data:")) continue;
-        let j; try { j = JSON.parse(l.slice(5)); } catch (e) { continue; }
-        const c = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
-        if (!c) continue;
-        full += c; vis = full.split("[[")[0].replace(/\[$/, ""); pend += vis.slice(sent); sent = vis.length; showSub(vis, true);
-        if (bub) { bub.textContent = vis; $("clog").scrollTop = 1e9; }
-        let m; while ((m = pend.match(/^[\s\S]*?[.!?\n](\s|$)/))) { speak(m[0]); pend = pend.slice(m[0].length); }
-      }
-    }
-    if (pend.trim()) speak(pend);
-    if (!full) { if (bub) bub.textContent = "No recibí respuesta."; showSub("No recibí respuesta."); setState("idle"); }
-    
-    // Guardar turnos en el historial y registrar en localStorage
-    history.push({ role: "user", parts: [{ text }] }, { role: "model", parts: [{ text: vis }] });
-    saveHistory();
-    
-    showSub(vis);
-    const mk = full.match(/\[\[\s*im[aá]genes?\s*:\s*([^\]]+)\]\]/i); if (mk) showImages(mk[1]);
-  } catch (e) { if (bub) bub.textContent = "Error: " + e.message; showSub("Error: " + e.message); setState("idle"); }
-  busy = false;
-}
-
-/* ---------- Micrófono siempre atento ---------- */
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, paused = false;
-const wake = /^\s*(hey|oye|ok|hola)?\s*,?\s*(ev|eve|ebe|ed|e\.?d\.?|e de|ede|eb)\b[\s,.:!?]*/i;
-const norm = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-function handle(raw) {
-  viaText = false;
-  let text = raw.trim(), woke = false;
-  const m = text.match(wake); if (m) { woke = true; text = text.slice(m[0].length).trim(); }
-  if (!woke && Date.now() > activeUntil) return;
-  const n = norm(text);
-  if (woke && !text) { activeUntil = Date.now() + 25000; stopVoice(); speak("Dime."); return; }
-  if (/\bajustes\b/.test(n)) { openSet(); return; }
-  if (/(quita|cierra|oculta|esconde)\s+(las\s+)?(imagenes|fotos)/.test(n)) { hideImages(); return; }
-  if (/(deja de|para de) (mirar|compartir|ver)/.test(n)) { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; speak("Hecho, ya no veo tu pantalla."); return; }
-  if (/(borra|olvida) (la )?(conversacion|chat|memoria)/.test(n)) { 
-    history = []; 
-    store.set("ev_history", ""); 
-    speak("Memoria y conversación borradas."); 
-    return; 
-  }
-  if (!text) return;
-  activeUntil = Date.now() + 25000; ask(text);
-}
-function startRec() {
-  if (!SR) { showSub("Este navegador no permite escuchar. Usa Chrome."); return; }
-  if (rec) return;
-  rec = new SR(); rec.lang = "es-ES"; rec.continuous = true; rec.interimResults = false;
-  rec.onstart = () => { if (state === "idle") $("st").textContent = "te escucho"; };
-  rec.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) handle(e.results[i][0].transcript); };
-  rec.onerror = e => { if (e.error === "not-allowed") showSub("Permite el micrófono en Chrome."); };
-  rec.onend = () => { rec = null; if (started && !paused) setTimeout(startRec, 250); };
-  try { rec.start(); } catch (e) { rec = null; }
-}
-function pauseRec() { paused = true; if (rec) try { rec.stop(); } catch (e) {} }
-function resumeRec() { if (!paused) return; paused = false; if (started) startRec(); }
-
-/* ---------- Ventana flotante ---------- */
-async function openPip() {
-  if (pip) { pip.win.close(); return; }
-  if (!("documentPictureInPicture" in window)) { showSub("Tu Chrome no permite la ventana flotante."); return; }
-  try {
-    const win = await documentPictureInPicture.requestWindow({ width: 300, height: 380 });
-    const d = win.document;
-    d.head.innerHTML = '<meta charset="utf-8"><title>ev</title>';
-    const css = d.createElement("style");
-    css.textContent = "html,body{margin:0;height:100%;background:#050302;color:#f6ead6;font-family:'Exo 2','Segoe UI',system-ui,sans-serif;overflow:hidden}canvas{position:absolute;left:0;top:0;width:100%;height:60%}#s{position:absolute;left:0;right:0;bottom:0;height:40%;padding:6px 14px;text-align:center;font-weight:300;font-size:15px;line-height:1.4;overflow:hidden;text-shadow:0 0 12px rgba(255,150,40,.35)}";
-    d.head.appendChild(css);
-    const c = d.createElement("canvas"), sub = d.createElement("div"); sub.id = "s";
-    d.body.append(c, sub);
-    pip = { win, sub, cx: c.getContext("2d") };
-    sub.textContent = $("sub").textContent; sub.style.opacity = $("sub").style.opacity || 1;
-    const pd = win.devicePixelRatio || 1;
-    const loop = t => {
-      if (!pip || pip.win !== win) return;
-      const w = win.innerWidth, h = win.innerHeight * .6;
-      if (c.width !== Math.round(w * pd) || c.height !== Math.round(h * pd)) { c.width = Math.round(w * pd); c.height = Math.round(h * pd); }
-      step(t); render(pip.cx, w, h, pd, t, .5, .5, Math.min(w, h) * .3);
-      win.requestAnimationFrame(loop);
-    };
-    win.requestAnimationFrame(loop);
-    win.addEventListener("click", () => { if (state === "speak") { stopVoice(); setState("idle"); } });
-    win.addEventListener("pagehide", () => { pip = null; });
-    showSub("Me quedo aquí flotando. Cambia de pestaña y dime lo que necesites.");
-  } catch (e) { pip = null; showSub("No pude abrir la ventana flotante."); }
-}
-try { navigator.mediaSession.setActionHandler("enterpictureinpicture", () => { if (!pip) openPip(); }); } catch (e) {}
-
-/* ---------- Imágenes ---------- */
-function hideImages() { imgMode = false; $("gal").classList.remove("on"); $("bImg").classList.remove("on"); }
-async function showImages(q) {
-  q = (q || "").trim(); if (!q) return;
-  try {
-    const u = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=10&gsrsearch=" + encodeURIComponent(q) + "&prop=imageinfo&iiprop=url|mime&iiurlwidth=640&format=json&origin=*";
-    const j = await (await fetch(u)).json();
-    const list = Object.values((j.query && j.query.pages) || {}).sort((a, b) => a.index - b.index)
-      .map(p => ({ i: p.imageinfo && p.imageinfo[0], t: p.title.replace(/^File:/, "").replace(/\.[a-z0-9]+$/i, "") }))
-      .filter(x => x.i && x.i.thumburl && /^image\/(jpeg|png|webp|gif|svg\+xml)/.test(x.i.mime)).slice(0, 6);
-    if (!list.length) return;
-    const g = $("gal"); g.innerHTML = "";
-    for (const x of list) {
-      const a = document.createElement("a"); a.href = x.i.descriptionurl || x.i.url; a.target = "_blank"; a.rel = "noopener"; a.title = x.t + " (Wikimedia Commons)";
-      const im = document.createElement("img"); im.src = x.i.thumburl; im.alt = x.t; im.loading = "lazy";
-      const sp = document.createElement("span"); sp.textContent = x.t;
-      a.append(im, sp); g.appendChild(a);
-    }
-    g.classList.add("on"); $("bImg").classList.add("on"); imgMode = true;
-  } catch (e) {}
-}
-$("bImg").onclick = hideImages;
-
-/* ---------- Botones pequeños ---------- */
-function addMsg(cls, t) {
-  const d = document.createElement("div"); d.className = "cm " + cls; d.textContent = t;
-  $("clog").appendChild(d); $("clog").scrollTop = 1e9; return d;
-}
-$("bCfg").onclick = () => { if ($("set").style.display === "block") $("set").style.display = "none"; else openSet(); };
-$("bTxt").onclick = () => { const c = $("chat"); c.classList.toggle("open"); if (c.classList.contains("open")) $("cin").focus(); };
-$("cform").onsubmit = e => {
-  e.preventDefault(); const v = $("cin").value.trim();
-  if (!v || busy) return; $("cin").value = ""; ask(v, true);
-};
-
-/* ---------- Un solo toque ---------- */
-async function tap() {
-  if (!started) {
-    started = true; $("st").textContent = "te escucho";
-    await shareScreen(); startRec();
-    speak(store.get("ed_k1") ? "Hola, soy ev. Te escucho." : "Hola, soy ev. Primero necesito tu clave de Gemini.");
-    if (!store.get("ed_k1")) openSet();
-  } else if (state === "speak") { stopVoice(); setState("idle"); }
-  else if (!stream) { await shareScreen(); }
-  else { openPip(); }
-}
-cv.addEventListener("click", tap);
-cv.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(); } });
-speechSynthesis.onvoiceschanged = () => {};
-</script>
+<script src="app.js"></script>
+</body>
+</html>
